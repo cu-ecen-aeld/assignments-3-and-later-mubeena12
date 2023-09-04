@@ -11,26 +11,27 @@ writestr="$2"
 
 # Check number of arguments
 if [ $# -ne 2 ]; then
-	echo "Usage: $0 <Provide a write file> <Provide a text to write in the file>"
+	echo "Usage: $0 <filename> <filecontents>"
 	exit 1
 fi
 
 # Check writefile is specified
 if [ -z "$writefile" ]; then
-  echo "Error: 'writefile' argument is not specified."
+  echo "Error: 'filename' argument is not specified."
   exit 1
 fi
 
 # Check writestr is specified
 if [ -z "$writestr" ]; then
-  echo "Error: 'writestr' argument is not specified."
+  echo "Error: 'filecontents' argument is not specified."
   exit 1
 fi
 
-# Create directory
+# Create output directory
 mkdir -p "$(dirname "$writefile")"
 
 # Write the content to the file
+# This code block was fully generated using ChatGPT at https://chat.openai.com/ with prompts including "shell script to write string to a file"
 echo "$writestr" > "$writefile"
 
 # Check for error
@@ -39,4 +40,4 @@ if [ $? -ne 0 ]; then
   exit 1
 fi
 
-echo "Content has been successfully written to '$writefile'."
+echo "File '$writefile' has been created successfully."

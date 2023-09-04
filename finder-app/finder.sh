@@ -1,4 +1,10 @@
-#! /bin/bash
+#---------------------------------------------
+# Author: Mubeena Udyavar Kazi
+# Course: ECEN 5713 - AESD
+# Reference: ChatGPT and stack overflow
+#---------------------------------------------
+
+#!/bin/sh
 
 filesdir="$1"
 searchstr="$2"
@@ -22,8 +28,8 @@ string_search(){
   local number_of_files=0
   local number_of_line_count=0
 
-  local all_files=($(find "${dir}" -type f))
-  for file in ${all_files[@]}; do
+  all_files=$(find "${dir}" -type f)
+  for file in ${all_files}; do
     if [ -f "$file" ]; then
       number_of_files=$((number_of_files + 1))
       matching_lines=$(grep -c "$search" "$file")

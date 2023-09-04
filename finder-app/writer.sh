@@ -1,4 +1,10 @@
-#! /bin/bash
+#------------------------------------------------
+# Author: Mubeena Udyavar Kazi
+# Course: ECEN 5713 - AESD
+# Reference: ChatGPT and stack overflow
+# -----------------------------------------------
+
+#!/bin/sh
 
 writefile="$1"
 writestr="$2"

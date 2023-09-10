@@ -18,12 +18,27 @@
 // Function to write string to file
 void write_str_to_file(char *writefile, char *writestr){
     openlog("writer.c", LOG_PID, LOG_USER);
-    // Verify if the writefile and writestr is empty
-    if (writefile == NULL  || writestr == NULL ){
-        syslog(LOG_ERR, "ERROR: %s and %s are both not specified", writefile, writestr);
+    // Verify whether the writefile and writestr pointers are NULL
+    if (writefile == NULL  || writestr == NULL){
+        syslog(LOG_ERR, "ERROR: Expected valid pointer, but received NULL pointer");
         closelog();
         exit(1);
     }
+
+    // Verify whether filename argument is empty.
+    if (strlen(writefile) == 0){
+        syslog(LOG_ERR, "ERROR: 'filename' argument is not specified.");
+        closelog();
+        exit(1);
+    }
+
+    // Verify whether filecontents argument is empty.
+    if (strlen(writestr) == 0){
+        syslog(LOG_ERR, "ERROR: 'filecontents' argument is not specified.");
+        closelog();
+        exit(1);
+    }
+
     // Open() System call is used to create the file
     int fd = open(writefile, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH );
     if (fd == -1){

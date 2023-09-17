@@ -3,11 +3,7 @@
 # Course: ECEN 5713 - AESD
 #--------------------------------------
 
-CC := gcc
-
-ifeq ($(CROSS_COMPILE),aarch64-none-linux-gnu-)
-   CC := aarch64-none-linux-gnu-gcc
-endif
+CC := $(CROSS_COMPILE)gcc
 
 all: echo_cc writer
 
@@ -21,4 +17,4 @@ writer.o: writer.c
 	$(CC) -g -c writer.c
 
 clean:
-	rm *.o writer
+	rm -rf *.o writer

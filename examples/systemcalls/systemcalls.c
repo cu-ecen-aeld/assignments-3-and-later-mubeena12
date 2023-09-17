@@ -1,3 +1,12 @@
+/*
+* Author: Mubeena Udyavar Kazi
+* Course: ECEN 5713 - AESD
+* Reference: 
+*   1. ChatGPT with prompt "Example to execute system commands using fork +  execv + waitpid"
+*   2. Stack overflow           
+*/
+
+
 #include "systemcalls.h"
 #include "stdlib.h"
 #include <sys/types.h>

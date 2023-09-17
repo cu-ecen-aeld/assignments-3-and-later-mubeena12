@@ -1,10 +1,10 @@
+#!/bin/sh
+
 #---------------------------------------------
 # Author: Mubeena Udyavar Kazi
 # Course: ECEN 5713 - AESD
 # Reference: ChatGPT and stack overflow
 #---------------------------------------------
-
-#!/bin/sh
 
 filesdir="$1"
 searchstr="$2"

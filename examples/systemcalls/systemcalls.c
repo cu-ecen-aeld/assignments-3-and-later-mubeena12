@@ -1,4 +1,11 @@
 #include "systemcalls.h"
+#include "stdlib.h"
+#include <sys/types.h>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+
 
 /**
  * @param cmd the command to execute with system()
@@ -16,8 +23,8 @@ bool do_system(const char *cmd)
  *   and return a boolean true if the system() call completed with success
  *   or false() if it returned a failure
 */
-
-    return true;
+    int ret_code = system(cmd);
+    return ((ret_code == 0) ? true : false);
 }
 
 /**
@@ -47,7 +54,7 @@ bool do_exec(int count, ...)
     command[count] = NULL;
     // this line is to avoid a compile warning before your implementation is complete
     // and may be removed
-    command[count] = command[count];
+    //command[count] = command[count];
 
 /*
  * TODO:
@@ -58,10 +65,38 @@ bool do_exec(int count, ...)
  *   as second argument to the execv() command.
  *
 */
+    fflush(stdout);
+    pid_t pid = fork();
 
+    if (pid < 0)
+    {
+        perror("fork");
+        return false;
+    }
+    else if (pid > 0)
+    {
+        int status;
+        waitpid(pid, &status, 0);
+        if (WIFEXITED(status))
+        {
+            // Child process executed successfully
+            int ret_code = WEXITSTATUS(status); 
+            return ((ret_code == 0) ? true : false); 
+        }
+        else
+        {
+            // Child process did not terminate normally
+            return false;
+        }
+    }
+    else
+    {
+        int ret_code = execv(command[0], command);
+        perror("execv");
+        exit(ret_code);
+    }
     va_end(args);
-
-    return true;
+    return false;
 }
 
 /**
@@ -82,7 +117,7 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
     command[count] = NULL;
     // this line is to avoid a compile warning before your implementation is complete
     // and may be removed
-    command[count] = command[count];
+    //command[count] = command[count];
 
 
 /*
@@ -92,7 +127,50 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
  *   The rest of the behaviour is same as do_exec()
  *
 */
+    int fd = open(outputfile, O_WRONLY|O_TRUNC|O_CREAT, 0644);
+    if (fd < 0) 
+    {
+        perror("open");
+        abort();
+    }
+    fflush(stdout);
+    pid_t pid = fork();
 
+    if (pid < 0)
+    {
+        perror("fork");
+        return false;
+    }
+    else if (pid > 0)
+    {
+        int status;
+        waitpid(pid, &status, 0);
+        close(fd);
+        if (WIFEXITED(status))
+        {
+            // Child process executed successfully
+            int ret_code = WEXITSTATUS(status); 
+            return ((ret_code == 0) ? true : false); 
+        }
+        else
+        {
+            // Child process did not terminate normally
+            return false;
+        }
+    }
+    else
+    {
+        if (dup2(fd, 1) < 0) 
+        { 
+            perror("dup2");
+            abort();
+            return false;
+        }
+        close(fd);
+        int ret_code = execv(command[0], command);
+        perror("execv");
+        exit(ret_code);
+    }
     va_end(args);
 
     return true;

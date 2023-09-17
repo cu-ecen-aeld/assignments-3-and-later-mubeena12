@@ -75,8 +75,10 @@ bool do_exec(int count, ...)
  *
 */
     fflush(stdout);
+    // Create a child process
     pid_t pid = fork();
 
+    // Check for the failure
     if (pid < 0)
     {
         perror("fork");
@@ -85,6 +87,7 @@ bool do_exec(int count, ...)
     else if (pid > 0)
     {
         int status;
+        // Wait for the child process to complete
         waitpid(pid, &status, 0);
         if (WIFEXITED(status))
         {
@@ -100,6 +103,7 @@ bool do_exec(int count, ...)
     }
     else
     {
+        // Store the execute command in a interger
         int ret_code = execv(command[0], command);
         perror("execv");
         exit(ret_code);
@@ -136,15 +140,19 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
  *   The rest of the behaviour is same as do_exec()
  *
 */
+    // Open the outputfile with right permissiom
     int fd = open(outputfile, O_WRONLY|O_TRUNC|O_CREAT, 0644);
+    // Check outputfile fail to open
     if (fd < 0) 
     {
         perror("open");
         abort();
     }
     fflush(stdout);
+    // Create a child proccess
     pid_t pid = fork();
 
+    // Check for the failure
     if (pid < 0)
     {
         perror("fork");
@@ -153,6 +161,7 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
     else if (pid > 0)
     {
         int status;
+        // Wait for a child proccess to complete
         waitpid(pid, &status, 0);
         close(fd);
         if (WIFEXITED(status))
@@ -176,6 +185,8 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
             return false;
         }
         close(fd);
+
+        // Execute the command and store it in the interger
         int ret_code = execv(command[0], command);
         perror("execv");
         exit(ret_code);

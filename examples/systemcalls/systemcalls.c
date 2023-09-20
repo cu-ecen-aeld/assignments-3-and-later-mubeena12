@@ -1,4 +1,20 @@
+/*
+* Author: Mubeena Udyavar Kazi
+* Course: ECEN 5713 - AESD
+* Reference: 
+*   1. ChatGPT with prompt "Example to execute system commands using fork +  execv + waitpid"
+*   2. Stack overflow           
+*/
+
+
 #include "systemcalls.h"
+#include "stdlib.h"
+#include <sys/types.h>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+
 
 /**
  * @param cmd the command to execute with system()
@@ -16,8 +32,8 @@ bool do_system(const char *cmd)
  *   and return a boolean true if the system() call completed with success
  *   or false() if it returned a failure
 */
-
-    return true;
+    int ret_code = system(cmd);
+    return ((ret_code == 0) ? true : false);
 }
 
 /**
@@ -47,7 +63,7 @@ bool do_exec(int count, ...)
     command[count] = NULL;
     // this line is to avoid a compile warning before your implementation is complete
     // and may be removed
-    command[count] = command[count];
+    //command[count] = command[count];
 
 /*
  * TODO:
@@ -58,10 +74,42 @@ bool do_exec(int count, ...)
  *   as second argument to the execv() command.
  *
 */
+    fflush(stdout);
+    // Create a child process
+    pid_t pid = fork();
 
+    // Check for the failure
+    if (pid < 0)
+    {
+        perror("fork");
+        return false;
+    }
+    else if (pid > 0)
+    {
+        int status;
+        // Wait for the child process to complete
+        waitpid(pid, &status, 0);
+        if (WIFEXITED(status))
+        {
+            // Child process executed successfully
+            int ret_code = WEXITSTATUS(status); 
+            return ((ret_code == 0) ? true : false); 
+        }
+        else
+        {
+            // Child process did not terminate normally
+            return false;
+        }
+    }
+    else
+    {
+        // Store the execute command in a interger
+        int ret_code = execv(command[0], command);
+        perror("execv");
+        exit(ret_code);
+    }
     va_end(args);
-
-    return true;
+    return false;
 }
 
 /**
@@ -82,7 +130,7 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
     command[count] = NULL;
     // this line is to avoid a compile warning before your implementation is complete
     // and may be removed
-    command[count] = command[count];
+    //command[count] = command[count];
 
 
 /*
@@ -92,7 +140,57 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
  *   The rest of the behaviour is same as do_exec()
  *
 */
+    // Open the outputfile with right permissiom
+    int fd = open(outputfile, O_WRONLY|O_TRUNC|O_CREAT, 0644);
+    // Check outputfile fail to open
+    if (fd < 0) 
+    {
+        perror("open");
+        abort();
+    }
+    fflush(stdout);
+    // Create a child proccess
+    pid_t pid = fork();
 
+    // Check for the failure
+    if (pid < 0)
+    {
+        perror("fork");
+        return false;
+    }
+    else if (pid > 0)
+    {
+        int status;
+        // Wait for a child proccess to complete
+        waitpid(pid, &status, 0);
+        close(fd);
+        if (WIFEXITED(status))
+        {
+            // Child process executed successfully
+            int ret_code = WEXITSTATUS(status); 
+            return ((ret_code == 0) ? true : false); 
+        }
+        else
+        {
+            // Child process did not terminate normally
+            return false;
+        }
+    }
+    else
+    {
+        if (dup2(fd, 1) < 0) 
+        { 
+            perror("dup2");
+            abort();
+            return false;
+        }
+        close(fd);
+
+        // Execute the command and store it in the interger
+        int ret_code = execv(command[0], command);
+        perror("execv");
+        exit(ret_code);
+    }
     va_end(args);
 
     return true;

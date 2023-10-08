@@ -91,6 +91,14 @@ int main(int argc, char *argv[]) {
         return -1;
     }
 
+    // Allow for reuse of port 9000
+    int enable_reuse_addr = 1; // Set to 1 to enable SO_REUSEADDR
+    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &enable_reuse_addr, sizeof(int)) == -1) {
+        perror("setsockopt");
+        close(sockfd);
+        return -1;
+    }
+
     // Bind to port 9000
     struct sockaddr_in server_addr;
     memset(&server_addr, 0, sizeof(server_addr));

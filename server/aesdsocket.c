@@ -92,8 +92,13 @@ int main(int argc, char *argv[]) {
     }
 
     // Allow for reuse of port 9000
-    int enable_reuse_addr = 1; // Set to 1 to enable SO_REUSEADDR
-    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &enable_reuse_addr, sizeof(int)) == -1) {
+    int enable_reuse = 1; // Set to 1 to enable reuse of port 9000
+    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &enable_reuse, sizeof(int)) == -1) {
+        perror("setsockopt");
+        close(sockfd);
+        return -1;
+    }
+    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEPORT, &enable_reuse, sizeof(int)) == -1) {
         perror("setsockopt");
         close(sockfd);
         return -1;
@@ -135,10 +140,9 @@ int main(int argc, char *argv[]) {
         syslog(LOG_INFO, "Accepted connection from %s", client_ip);
 
         // Receive and process data
-        size_t max_size = 24576;
-        //char buffer[24576]; // Assuming max packet size is 1024
-        char* buffer = (char *)malloc(max_size * sizeof(char));
-        memset(buffer, 0, max_size * sizeof(char));
+        size_t buffer_size = 24000;
+        char* buffer = (char *)malloc(buffer_size * sizeof(char));
+        memset(buffer, 0, buffer_size * sizeof(char));
         ssize_t recv_size;
         while ((recv_size = recv(client_sockfd, buffer, sizeof(buffer), 0)) > 0) {
             // Append data to file
@@ -161,7 +165,7 @@ int main(int argc, char *argv[]) {
                 }
             }
 
-            memset(buffer, 0, max_size * sizeof(char));
+            memset(buffer, 0, buffer_size * sizeof(char));
         }
 
         free(buffer);

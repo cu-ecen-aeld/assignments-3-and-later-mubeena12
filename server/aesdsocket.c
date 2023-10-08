@@ -140,8 +140,13 @@ int main(int argc, char *argv[]) {
         syslog(LOG_INFO, "Accepted connection from %s", client_ip);
 
         // Receive and process data
-        size_t buffer_size = 24000;
+        size_t buffer_size = 1024;
         char* buffer = (char *)malloc(buffer_size * sizeof(char));
+
+        if (buffer == NULL) {
+            perror("malloc");
+            return -1;
+        }
         memset(buffer, 0, buffer_size * sizeof(char));
         ssize_t recv_size;
         while ((recv_size = recv(client_sockfd, buffer, sizeof(buffer), 0)) > 0) {
@@ -156,13 +161,21 @@ int main(int argc, char *argv[]) {
             if (strchr(buffer, '\n') != NULL) {
                 FILE *read_file = fopen("/var/tmp/aesdsocketdata", "r");
                 if (read_file != NULL) {
-                    fseek(read_file, 0, SEEK_END);
-                    long file_size = ftell(read_file);
-                    fseek(read_file, 0, SEEK_SET);
-                    fread(buffer, 1, file_size, read_file);
-                    fclose(read_file);
-                    send(client_sockfd, buffer, strlen(buffer), 0);
+                    size_t bytes_read = 0;
+                    //memset(buffer, 0, buffer_size * sizeof(char));
+                    while ((bytes_read = fread(buffer, 1, sizeof(buffer), read_file)) > 0) {
+                        // Send content back to client
+                        send(client_sockfd, buffer, bytes_read, 0);
+                        //memset(buffer, 0, buffer_size * sizeof(char));
+                    }
+                    //fseek(read_file, 0, SEEK_END);
+                    //long file_size = ftell(read_file);
+                    //fseek(read_file, 0, SEEK_SET);
+                    //fread(buffer, 1, file_size, read_file);
+                    //fclose(read_file);
+                    //send(client_sockfd, buffer, strlen(buffer), 0);
                 }
+                fclose(read_file);
             }
 
             memset(buffer, 0, buffer_size * sizeof(char));

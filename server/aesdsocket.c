@@ -1,18 +1,26 @@
+/*
+* Author: Mubeena Udyavar Kazi
+* Course: ECEN 5713 - AESD
+* Reference: 
+*   1. ChatGPT with the following prompts.
+*      - Example for socket based server to send and receive data in C
+*      - Example in C to daemonize a process with signal handling
+*   2. Stack overflow
+*/
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <arpa/inet.h>
-#include <sys/types.h>
 #include <sys/socket.h>
-#include <netinet/in.h>
 #include <syslog.h>
 #include <signal.h>
-#include <sys/stat.h>
 
 int sockfd, client_sockfd;
 
 void cleanup() {
+
     // Close open sockets
     close(sockfd);
     close(client_sockfd);
@@ -40,24 +48,27 @@ void daemonize() {
     // Fork the parent process
     pid = fork();
 
-    // Error occurred
+    // Error occurred during fork
     if (pid < 0) {
+        perror("fork failed");
         exit(EXIT_FAILURE);
     }
 
-    // Success: Let the parent terminate
+    // Terminate parent process on successful fork
     if (pid > 0) {
         exit(EXIT_SUCCESS);
     }
 
-    // On success: The child process becomes session leader
+    // Create a new SID for child process
     sid = setsid();
     if (sid < 0) {
+        perror("setsid failed");
         exit(EXIT_FAILURE);
     }
 
     // Change the current working directory
     if ((chdir("/")) < 0) {
+        perror("chdir failed");
         exit(EXIT_FAILURE);
     }
 
@@ -93,12 +104,7 @@ int main(int argc, char *argv[]) {
 
     // Allow for reuse of port 9000
     int enable_reuse = 1; // Set to 1 to enable reuse of port 9000
-    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &enable_reuse, sizeof(int)) == -1) {
-        perror("setsockopt");
-        close(sockfd);
-        return -1;
-    }
-    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEPORT, &enable_reuse, sizeof(int)) == -1) {
+    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &enable_reuse, sizeof(int)) == -1) {
         perror("setsockopt");
         close(sockfd);
         return -1;
@@ -162,18 +168,9 @@ int main(int argc, char *argv[]) {
                 FILE *read_file = fopen("/var/tmp/aesdsocketdata", "r");
                 if (read_file != NULL) {
                     size_t bytes_read = 0;
-                    //memset(buffer, 0, buffer_size * sizeof(char));
                     while ((bytes_read = fread(buffer, 1, sizeof(buffer), read_file)) > 0) {
-                        // Send content back to client
                         send(client_sockfd, buffer, bytes_read, 0);
-                        //memset(buffer, 0, buffer_size * sizeof(char));
                     }
-                    //fseek(read_file, 0, SEEK_END);
-                    //long file_size = ftell(read_file);
-                    //fseek(read_file, 0, SEEK_SET);
-                    //fread(buffer, 1, file_size, read_file);
-                    //fclose(read_file);
-                    //send(client_sockfd, buffer, strlen(buffer), 0);
                 }
                 fclose(read_file);
             }

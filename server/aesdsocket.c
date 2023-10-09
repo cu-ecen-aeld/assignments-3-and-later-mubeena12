@@ -21,14 +21,14 @@
 
 int sockfd, client_sockfd, datafd;
 
-void cleanup() {
+void cleanup(int exit_code) {
 
     // Close open sockets
-    close(sockfd);
-    close(client_sockfd);
+    if (sockfd >= 0) close(sockfd);
+    if (client_sockfd >=0) close(client_sockfd);
 
     // Close file descriptors
-    close(datafd);
+    if (datafd >= 0) close(datafd);
 
     // Delete the file
     remove("/var/tmp/aesdsocketdata");
@@ -37,13 +37,13 @@ void cleanup() {
     closelog();
 
     // Exit
-    exit(0);
+    exit(exit_code);
 }
 
 void handle_signal(int sig) {
    if (sig == SIGINT || sig == SIGTERM) {
        syslog(LOG_INFO, "Caught signal, exiting");
-       cleanup();
+       cleanup(EXIT_SUCCESS);
    }
 }
 
@@ -55,8 +55,8 @@ void daemonize() {
 
     // Error occurred during fork
     if (pid < 0) {
-        perror("fork failed");
-        exit(EXIT_FAILURE);
+        syslog(LOG_ERR, "ERROR: Failed to fork");
+        cleanup(EXIT_FAILURE);
     }
 
     // Terminate parent process on successful fork
@@ -67,14 +67,14 @@ void daemonize() {
     // Create a new SID for child process
     sid = setsid();
     if (sid < 0) {
-        perror("setsid failed");
-        exit(EXIT_FAILURE);
+        syslog(LOG_ERR, "ERROR: Failed to setsid");
+        cleanup(EXIT_FAILURE);
     }
 
     // Change the current working directory
     if ((chdir("/")) < 0) {
-        perror("chdir failed");
-        exit(EXIT_FAILURE);
+        syslog(LOG_ERR, "ERROR: Failed to chdir");
+        cleanup(EXIT_FAILURE);
     }
 
     // Close out the standard file descriptors
@@ -103,16 +103,15 @@ int main(int argc, char *argv[]) {
     // Create a socket
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd == -1) {
-        perror("socket");
-        return -1;
+        syslog(LOG_ERR, "ERROR: Failed to create socket");
+        cleanup(EXIT_FAILURE);
     }
 
     // Allow for reuse of port 9000
     int enable_reuse = 1; // Set to 1 to enable reuse of port 9000
     if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &enable_reuse, sizeof(int)) == -1) {
-        perror("setsockopt");
-        close(sockfd);
-        return -1;
+        syslog(LOG_ERR, "ERROR: Failed to setsockopt");
+        cleanup(EXIT_FAILURE);
     }
 
     // Bind to port 9000
@@ -123,14 +122,14 @@ int main(int argc, char *argv[]) {
     server_addr.sin_port = htons(9000);
 
     if (bind(sockfd, (struct sockaddr*)&server_addr, sizeof(server_addr)) == -1) {
-        perror("bind");
-        close(sockfd);
-        return -1;
+        syslog(LOG_ERR, "ERROR: Failed to bind");
+        cleanup(EXIT_FAILURE);
     }
 
+    close(-1);
     // Listen for connections
     if (listen(sockfd, 5) == -1) {
-        perror("listen");
+        syslog(LOG_ERR, "ERROR: Failed to listen");
         close(sockfd);
         return -1;
     }
@@ -139,7 +138,7 @@ int main(int argc, char *argv[]) {
     char *aesddata_file = "/var/tmp/aesdsocketdata";
     datafd = open(aesddata_file, O_CREAT | O_RDWR | O_APPEND, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
     if (datafd == -1){
-        syslog(LOG_ERR, "ERROR: Could not create %s file", aesddata_file);
+        syslog(LOG_ERR, "ERROR: Failed to create file - %s", aesddata_file);
         closelog();
         exit(EXIT_FAILURE);
     }
@@ -150,7 +149,7 @@ int main(int argc, char *argv[]) {
         socklen_t client_addr_len = sizeof(client_addr);
         client_sockfd = accept(sockfd, (struct sockaddr*)&client_addr, &client_addr_len);
         if (client_sockfd == -1) {
-            perror("accept");
+            syslog(LOG_WARNING, "WARNING: Failed to accept, retrying ...");
             continue; // Continue accepting connections
         }
 
@@ -163,18 +162,16 @@ int main(int argc, char *argv[]) {
         size_t buffer_size = 1024;
         char* buffer = (char *)malloc(buffer_size * sizeof(char));
         if (buffer == NULL) {
-            perror("malloc");
-            return -1;
+            syslog(LOG_ERR, "ERROR: Failed to malloc");
+            cleanup(EXIT_FAILURE);
         }
         memset(buffer, 0, buffer_size * sizeof(char));
         ssize_t recv_size;
         while ((recv_size = recv(client_sockfd, buffer, buffer_size, 0)) > 0) {
             // Append data to file
             if (write(datafd, buffer, recv_size) == -1) {
-                syslog(LOG_ERR, "ERROR: Could not write to %s file", aesddata_file);
-                closelog();
-                close(datafd);
-                exit(EXIT_FAILURE);
+                syslog(LOG_ERR, "ERROR: Failed to write to %s file", aesddata_file);
+                cleanup(EXIT_FAILURE);
             }
 
             // Send data back to client if a complete packet is received (ends with newline)
@@ -183,10 +180,8 @@ int main(int argc, char *argv[]) {
                 lseek(datafd, 0, SEEK_SET);
                 size_t bytes_read = read(datafd, buffer, buffer_size);
                 if (bytes_read == -1) {
-                    syslog(LOG_ERR, "ERROR: Could not read from %s file", aesddata_file);
-                    closelog();
-                    close(datafd);
-                    exit(EXIT_FAILURE);
+                    syslog(LOG_ERR, "ERROR: Failed to read from %s file", aesddata_file);
+                    cleanup(EXIT_FAILURE);
                 }
                 while (bytes_read > 0) {
                     send(client_sockfd, buffer, bytes_read, 0);
@@ -202,10 +197,5 @@ int main(int argc, char *argv[]) {
         syslog(LOG_INFO, "Closed connection from %s", client_ip);
         close(client_sockfd);
     }
-
-    // This part will only be reached on SIGINT or SIGTERM
-    // Perform cleanup and exit
-    cleanup();
-
     return 0;
 }

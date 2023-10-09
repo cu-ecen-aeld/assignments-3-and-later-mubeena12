@@ -16,14 +16,19 @@
 #include <sys/socket.h>
 #include <syslog.h>
 #include <signal.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
-int sockfd, client_sockfd;
+int sockfd, client_sockfd, datafd;
 
 void cleanup() {
 
     // Close open sockets
     close(sockfd);
     close(client_sockfd);
+
+    // Close file descriptors
+    close(datafd);
 
     // Delete the file
     remove("/var/tmp/aesdsocketdata");
@@ -130,6 +135,15 @@ int main(int argc, char *argv[]) {
         return -1;
     }
 
+    // Open file for aesdsocketdata
+    char *aesddata_file = "/var/tmp/aesdsocketdata";
+    datafd = open(aesddata_file, O_CREAT | O_RDWR | O_APPEND, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+    if (datafd == -1){
+        syslog(LOG_ERR, "ERROR: Could not create %s file", aesddata_file);
+        closelog();
+        exit(EXIT_FAILURE);
+    }
+
     // Accept connections in a loop
     while (1) {
         struct sockaddr_in client_addr;
@@ -148,33 +162,37 @@ int main(int argc, char *argv[]) {
         // Receive and process data
         size_t buffer_size = 1024;
         char* buffer = (char *)malloc(buffer_size * sizeof(char));
-
         if (buffer == NULL) {
             perror("malloc");
             return -1;
         }
         memset(buffer, 0, buffer_size * sizeof(char));
         ssize_t recv_size;
-        while ((recv_size = recv(client_sockfd, buffer, sizeof(buffer), 0)) > 0) {
+        while ((recv_size = recv(client_sockfd, buffer, buffer_size, 0)) > 0) {
             // Append data to file
-            FILE *file = fopen("/var/tmp/aesdsocketdata", "a");
-            if (file != NULL) {
-                fprintf(file, "%s", buffer);
-                fclose(file);
+            if (write(datafd, buffer, recv_size) == -1) {
+                syslog(LOG_ERR, "ERROR: Could not write to %s file", aesddata_file);
+                closelog();
+                close(datafd);
+                exit(EXIT_FAILURE);
             }
 
             // Send data back to client if a complete packet is received (ends with newline)
-            if (strchr(buffer, '\n') != NULL) {
-                FILE *read_file = fopen("/var/tmp/aesdsocketdata", "r");
-                if (read_file != NULL) {
-                    size_t bytes_read = 0;
-                    while ((bytes_read = fread(buffer, 1, sizeof(buffer), read_file)) > 0) {
-                        send(client_sockfd, buffer, bytes_read, 0);
-                    }
+            if (memchr(buffer, '\n', buffer_size) != NULL) {
+                // Reset file offset to the beginning of the file
+                lseek(datafd, 0, SEEK_SET);
+                size_t bytes_read = read(datafd, buffer, buffer_size);
+                if (bytes_read == -1) {
+                    syslog(LOG_ERR, "ERROR: Could not read from %s file", aesddata_file);
+                    closelog();
+                    close(datafd);
+                    exit(EXIT_FAILURE);
                 }
-                fclose(read_file);
+                while (bytes_read > 0) {
+                    send(client_sockfd, buffer, bytes_read, 0);
+                    bytes_read = read(datafd, buffer, buffer_size); 
+                }
             }
-
             memset(buffer, 0, buffer_size * sizeof(char));
         }
 
@@ -182,7 +200,6 @@ int main(int argc, char *argv[]) {
 
         // Log closed connection
         syslog(LOG_INFO, "Closed connection from %s", client_ip);
-
         close(client_sockfd);
     }
 

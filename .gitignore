@@ -9,3 +9,5 @@ test.sh.log
 *.swp
 Test_*_Runner.c
 build/
+*/valgrind-out.txt
+server/aesdsocket

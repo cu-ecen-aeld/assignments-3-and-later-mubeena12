@@ -3,14 +3,15 @@
 # Course: ECEN 5713 - AESD
 #--------------------------------------
 
-CC := $(CROSS_COMPILE)gcc
-
-CFLAGS := -g -Wall -Werror
+CC ?= $(CROSS_COMPILE)gcc
+CFLAGS ?= -g -Wall -Werror
+TARGET ?= aesdsocket
+LDFLAGS ?= -lpthread
 
 all: aesdsocket
 
 aesdsocket : aesdsocket.o
-	$(CC) $(CFLAGS) aesdsocket.o -o aesdsocket -lpthread
+	$(CC) $(CFLAGS) aesdsocket.o -o $(TARGET) $(LDFLAGS)
 
 aesdsocket.o: aesdsocket.c
 	$(CC) $(CFLAGS) -c aesdsocket.c

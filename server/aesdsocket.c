@@ -266,18 +266,24 @@ int main(int argc, char *argv[]) {
     }
 
     // Dedicated thread to append timestamps
+    /*
     struct thread_info_t *timestamp_thread = malloc(sizeof(struct thread_info_t));
     if (timestamp_thread == NULL) {
         syslog(LOG_ERR, "ERROR: Failed to malloc");
         cleanup(EXIT_FAILURE);
     }
     if (pthread_create(&timestamp_thread->thread_id, NULL, timestamp_handler, NULL) != 0) {
+    */
+    pthread_t timestamp_thread;
+    if (pthread_create(&timestamp_thread, NULL, timestamp_handler, NULL) != 0) {
         syslog(LOG_ERR, "ERROR: Failed to create timestamp thread!");
         cleanup(EXIT_FAILURE);
     }
+    /*
     else {
         SLIST_INSERT_HEAD(&thread_list, timestamp_thread, entries);
     }
+    */
 
     // Accept connections in a loop
     while (1) {

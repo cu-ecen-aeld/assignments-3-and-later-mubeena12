@@ -6,7 +6,7 @@
 CC ?= $(CROSS_COMPILE)gcc
 CFLAGS ?= -g -Wall -Werror
 TARGET ?= aesdsocket
-LDFLAGS ?= -lpthread
+LDFLAGS ?= -pthread -lrt
 
 all: aesdsocket
 

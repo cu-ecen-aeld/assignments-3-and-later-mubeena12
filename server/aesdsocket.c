@@ -19,8 +19,9 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <pthread.h>
-#include <sys/queue.h>
+#include "queue.h"
 #include <time.h> 
+#include <errno.h>
 
 int sockfd, datafd;
 //int sockfd, client_sockfd, datafd;
@@ -38,6 +39,7 @@ typedef struct  client_info
 
 struct thread_info_t {
     pthread_t thread_id;
+    int work_done;
     client_info_t client_data;
     SLIST_ENTRY(thread_info_t) entries;
 };
@@ -181,6 +183,7 @@ void *handle_connection(void *arg)
     close(client_data.client_sockfd);
 
     printf("END: Thread ID: %lu\n", tid);
+    thread_info->work_done = 1;
     return NULL;
 }
 
@@ -307,6 +310,7 @@ int main(int argc, char *argv[]) {
         syslog(LOG_INFO, "Accepted connection from %s", new_thread->client_data.client_ip);
 
         new_thread->client_data.client_sockfd = client_sockfd;
+        new_thread->work_done = 0;
 
         // Handle connection
         if (pthread_create(&new_thread->thread_id, NULL, handle_connection, (void *)new_thread) != 0) {
@@ -315,6 +319,30 @@ int main(int argc, char *argv[]) {
         }
         else {
             SLIST_INSERT_HEAD(&thread_list, new_thread, entries);
+        }
+
+        // Join complete threads
+        struct thread_info_t *thread;// = NULL;
+        struct thread_info_t *thread_tmp;// = NULL;
+        SLIST_FOREACH_SAFE(thread, &thread_list, entries, thread_tmp) {
+            /*
+            int thread_state = pthread_kill(thread->thread_id, 0);
+            if (thread_state == ESRCH) {
+                SLIST_REMOVE_HEAD(&thread_list, entries);
+                //pthread_join(thread->thread_id, NULL);
+                free(thread);
+            }
+            */
+            if (thread->work_done == 1) {
+                printf("Joining thread in main: %ld\n", thread->thread_id);
+                pthread_join(thread->thread_id, NULL);
+                SLIST_REMOVE(&thread_list, thread, thread_info_t, entries);
+                free(thread);
+                //thread = NULL;
+            }
+            else {
+                //printf("Thread [%ld] is still working ...\n", thread->thread_id);
+            }
         }
     }
     return 0;

@@ -10,7 +10,7 @@ CFLAGS := -g -Wall -Werror
 all: aesdsocket
 
 aesdsocket : aesdsocket.o
-	$(CC) $(CFLAGS) aesdsocket.o -o aesdsocket
+	$(CC) $(CFLAGS) aesdsocket.o -o aesdsocket -lpthread
 
 aesdsocket.o: aesdsocket.c
 	$(CC) $(CFLAGS) -c aesdsocket.c

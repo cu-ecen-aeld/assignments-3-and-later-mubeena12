@@ -20,9 +20,13 @@
 #include <fcntl.h>
 #include <pthread.h>
 #include <sys/queue.h>
+#include <time.h> 
 
 int sockfd, datafd;
 //int sockfd, client_sockfd, datafd;
+
+int signal_exit = 0;
+
 static char *aesddata_file = "/var/tmp/aesdsocketdata";
 
 typedef struct  client_info
@@ -43,6 +47,8 @@ SLIST_HEAD(thread_list_t, thread_info_t) thread_list;
 pthread_mutex_t aesddata_file_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 void cleanup(int exit_code) {
+
+    signal_exit = 1;
 
     // Clean up threads
     struct thread_info_t *thread;
@@ -178,6 +184,25 @@ void *handle_connection(void *arg)
     return NULL;
 }
 
+void *timestamp_handler(void *arg) {
+    while (!signal_exit) {
+        time_t current_time = time(NULL);
+        struct tm *time_info = localtime(&current_time);
+
+        char timestamp[100];
+        strftime(timestamp, sizeof(timestamp), "timestamp: %a, %d %b %Y %H:%M:%S %z\n", time_info);
+
+        // Append timestamp to /var/tmp/aesdsocketdata
+        pthread_mutex_lock(&aesddata_file_mutex);
+        write(datafd, timestamp, strlen(timestamp));
+        pthread_mutex_unlock(&aesddata_file_mutex);
+
+        sleep(10); // Wait for 10 seconds before appending the next timestamp
+    }
+
+    return NULL;
+}
+
 int main(int argc, char *argv[]) {
     int daemon_mode = 0;
     if (argc > 1 && strcmp(argv[1], "-d") == 0) {
@@ -238,6 +263,20 @@ int main(int argc, char *argv[]) {
         syslog(LOG_ERR, "ERROR: Failed to create file - %s", aesddata_file);
         closelog();
         exit(EXIT_FAILURE);
+    }
+
+    // Dedicated thread to append timestamps
+    struct thread_info_t *timestamp_thread = malloc(sizeof(struct thread_info_t));
+    if (timestamp_thread == NULL) {
+        syslog(LOG_ERR, "ERROR: Failed to malloc");
+        cleanup(EXIT_FAILURE);
+    }
+    if (pthread_create(&timestamp_thread->thread_id, NULL, timestamp_handler, NULL) != 0) {
+        syslog(LOG_ERR, "ERROR: Failed to create timestamp thread!");
+        cleanup(EXIT_FAILURE);
+    }
+    else {
+        SLIST_INSERT_HEAD(&thread_list, timestamp_thread, entries);
     }
 
     // Accept connections in a loop

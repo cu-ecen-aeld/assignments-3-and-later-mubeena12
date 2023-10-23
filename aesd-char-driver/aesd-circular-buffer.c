@@ -18,6 +18,13 @@
 #include <stdio.h>
 
 /**
+ * References:
+ *   1. ChatGPT:
+ *       - Main prompt: Implement a circular buffer with struct pointer to data, integer in offset, integer out offset and boolean full flag. 
+ *                      The struct for data includes a  const char pointer and size of the char array.
+ */
+
+/**
  * @param buffer the buffer to search for corresponding offset.  Any necessary locking must be performed by caller.
  * @param char_offset the position to search for in the buffer list, describing the zero referenced
  *      character index if all buffer strings were concatenated end to end
@@ -33,6 +40,12 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct
     /**
     * TODO: implement per description
     */
+    /**
+     * References:
+     *   1. ChatGPT:
+     *        - Follow up prompt: Implement a function to find entry with provided offset. offset assumes all the bytes in the data are concatenated.
+     *                            This function should also return the byte offset of the matched data
+     */
     size_t cumulative_length = 0;
     size_t entry_index = buffer->out_offs;
     size_t entries_checked = 0; // Track the number of entries checked
@@ -74,6 +87,11 @@ void aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, const s
     * TODO: implement per description
     */
 
+   /* References:
+    *   1. ChatGPT:
+    *        - Follow up prompt: Include a function to add new entry to the circular buffer 
+    */ 
+
    // Check if the buffer is already full
     if (buffer->full) {
         // If so, overwrite the oldest entry and advance out_offs
@@ -90,27 +108,6 @@ void aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, const s
     if (buffer->in_offs == buffer->out_offs) {
         buffer->full = true;
     }
-//    if (buffer->full) {
-//         // If buffer is full, overwrite the oldest entry
-//         buffer->out_offs = (buffer->out_offs + 1) % AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;
-//     } else if (buffer->in_offs == AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED - 1) {
-//         buffer->full = true;  // Buffer is full after this write
-//     }
-
-//     buffer->entry[buffer->in_offs] = *add_entry;
-//     buffer->in_offs = (buffer->in_offs + 1) % AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;
-
-/*
-    // Print all entries in the buffer
-    int idx;
-    struct aesd_buffer_entry *tmp_entry;
-    
-    AESD_CIRCULAR_BUFFER_FOREACH(tmp_entry, buffer, idx)
-    {
-        printf("index = %d: in_offs = %d, out_offs = %d, full = %d, entry.size = %ld, entry.buff = %s\n", idx, buffer->in_offs, buffer->out_offs, buffer->full, tmp_entry->size, tmp_entry->buffptr);
-    }
-    printf("----------------\n");
-*/
 }
 
 /**

@@ -47,6 +47,7 @@ int aesd_release(struct inode *inode, struct file *filp)
     /**
      * TODO: handle release
      */
+    filp->private_data = NULL;
     return 0;
 }
 
@@ -75,6 +76,7 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
 
         if (copy_to_user(buf, entry->buffptr + entry_offset, bytes_to_read)) {
             retval = -EFAULT; // Error while copying data to user space
+            PDEBUG("ERROR: copy_to_user failed!");
         } else {
             *f_pos += bytes_to_read; // Update file position
             retval = bytes_to_read; // Set return value to the actual number of bytes read
@@ -102,6 +104,11 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
     /**
      * TODO: handle write
      */
+
+    if (mutex_lock_interruptible(&dev->write_mutex)) {
+        retval = -ERESTARTSYS;
+        goto exit;
+    }
 
     if (count == 0) {
         retval = 0;
@@ -153,6 +160,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
     }
 
 exit:
+    mutex_unlock(&dev->write_mutex);
     return retval;
 }
 
@@ -196,6 +204,9 @@ int aesd_init_module(void)
      */
     // Initialize the circular buffer
     aesd_circular_buffer_init(&aesd_device.circular_buffer);
+    aesd_device.cached_entry.buffptr = NULL;
+    aesd_device.cached_entry.size = 0;
+    mutex_init(&aesd_device.write_mutex);
     
     result = aesd_setup_cdev(&aesd_device);
 
@@ -223,6 +234,8 @@ void aesd_cleanup_module(void)
             entry->buffptr = NULL;
         }
     }
+
+    mutex_destroy(&aesd_device.write_mutex);
 
     unregister_chrdev_region(devno, 1);
 }

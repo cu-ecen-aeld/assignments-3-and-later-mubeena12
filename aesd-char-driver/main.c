@@ -69,7 +69,6 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
         goto exit;
     }
 
-
     if (entry != NULL) {
         size_t available_bytes = entry->size - entry_offset;
         size_t bytes_to_read = count > available_bytes ? available_bytes : count;
@@ -91,9 +90,12 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
 {
     ssize_t retval = -ENOMEM;
     struct aesd_dev *dev = filp->private_data;
-    size_t bytes_to_write = count;
 
     char *temp_buf;
+    size_t temp_buf_size = count;
+    size_t temp_buf_write_offset = 0;
+
+    size_t bytes_not_copied = 0;
     struct aesd_buffer_entry new_entry;
     PDEBUG("write %zu bytes with offset %lld",count,*f_pos);
     /**
@@ -101,29 +103,54 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
      */
 
     if (count == 0) {
+        retval = 0;
         goto exit; // Nothing to write
     }
 
-    temp_buf = kmalloc(bytes_to_write, GFP_KERNEL); // Allocate memory for the buffer
+    if (dev->cached_entry.buffptr != NULL) {
+        temp_buf_write_offset = dev->cached_entry.size;
+        temp_buf = (char *)dev->cached_entry.buffptr;
+        temp_buf_size += temp_buf_write_offset;
+
+        temp_buf = krealloc(temp_buf, temp_buf_size, GFP_KERNEL);
+    }
+    else {
+        temp_buf = kmalloc(temp_buf_size, GFP_KERNEL); // Allocate memory for the buffer
+    }
     if (!temp_buf) {
         retval = -ENOMEM; // Memory allocation failed
         goto exit; // Jump to cleanup and return
     }
 
-    if (copy_from_user(temp_buf, buf, bytes_to_write)) {
-        retval = -EFAULT; // Error while copying data from user space
-        goto exit; // Jump to cleanup and return
+    bytes_not_copied = copy_from_user(&temp_buf[temp_buf_write_offset], buf, count);
+
+    if (bytes_not_copied == 0) {
+        retval = count;
+    }
+    else {
+        retval = count - bytes_not_copied;
+        temp_buf_size -= bytes_not_copied;
+        PDEBUG("WARNING: copy_from_user failed to copy %zu bytes (total expected = %zu bytes).\n", bytes_not_copied, count);
     }
 
-    new_entry.buffptr = temp_buf;
-    new_entry.size = bytes_to_write;
-    aesd_circular_buffer_add_entry(&dev->circular_buffer, &new_entry);
+    if (memchr(temp_buf, '\n', temp_buf_size) != NULL) {
+        new_entry.buffptr = temp_buf;
+        new_entry.size = temp_buf_size;
+        aesd_circular_buffer_add_entry(&dev->circular_buffer, &new_entry);
 
-    retval = bytes_to_write; // Set return value to the actual number of bytes written
+        dev->cached_entry.buffptr = NULL;
+        dev->cached_entry.size= 0;
+    }
+    else {
+        dev->cached_entry.buffptr = temp_buf;
+        dev->cached_entry.size = temp_buf_size;
+    }
+    retval = count; // Set return value to the actual number of bytes written
 
 exit:
     return retval;
 }
+
 struct file_operations aesd_fops = {
     .owner =    THIS_MODULE,
     .read =     aesd_read,
@@ -145,8 +172,6 @@ static int aesd_setup_cdev(struct aesd_dev *dev)
     }
     return err;
 }
-
-
 
 int aesd_init_module(void)
 {
@@ -196,8 +221,6 @@ void aesd_cleanup_module(void)
 
     unregister_chrdev_region(devno, 1);
 }
-
-
 
 module_init(aesd_init_module);
 module_exit(aesd_cleanup_module);

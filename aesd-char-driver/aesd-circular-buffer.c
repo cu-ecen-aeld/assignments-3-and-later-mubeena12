@@ -15,7 +15,6 @@
 #endif
 
 #include "aesd-circular-buffer.h"
-#include <stdio.h>
 
 /**
  * References:

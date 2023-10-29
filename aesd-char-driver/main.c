@@ -91,6 +91,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
     ssize_t retval = -ENOMEM;
     struct aesd_dev *dev = filp->private_data;
 
+    const char *replaced_buffer = NULL;
     char *temp_buf;
     size_t temp_buf_size = count;
     size_t temp_buf_write_offset = 0;
@@ -136,7 +137,12 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
     if (memchr(temp_buf, '\n', temp_buf_size) != NULL) {
         new_entry.buffptr = temp_buf;
         new_entry.size = temp_buf_size;
-        aesd_circular_buffer_add_entry(&dev->circular_buffer, &new_entry);
+        replaced_buffer = aesd_circular_buffer_add_entry(&dev->circular_buffer, &new_entry);
+
+        if (replaced_buffer != NULL)
+        {
+            kfree(replaced_buffer);
+        }
 
         dev->cached_entry.buffptr = NULL;
         dev->cached_entry.size= 0;
@@ -145,7 +151,6 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
         dev->cached_entry.buffptr = temp_buf;
         dev->cached_entry.size = temp_buf_size;
     }
-    retval = count; // Set return value to the actual number of bytes written
 
 exit:
     return retval;

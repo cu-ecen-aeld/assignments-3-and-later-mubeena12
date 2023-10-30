@@ -11,6 +11,11 @@
  *
  */
 
+/**
+ * References:
+ *   1. ChatGPT: Example of char device kernel driver implementation in C
+ */
+
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/printk.h>
@@ -127,7 +132,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
     }
     if (!temp_buf) {
         retval = -ENOMEM; // Memory allocation failed
-        goto exit; // Jump to cleanup and return
+        goto exit; 
     }
 
     bytes_not_copied = copy_from_user(&temp_buf[temp_buf_write_offset], buf, count);

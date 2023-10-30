@@ -140,6 +140,14 @@ void *handle_connection(void *arg)
     struct thread_info_t *thread_info = (struct thread_info_t *)arg;
     client_info_t client_data = thread_info->client_data;
 
+    // Open file for aesdsocketdata
+    datafd = open(aesddata_file, O_CREAT | O_RDWR | O_APPEND, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+    if (datafd == -1){
+        syslog(LOG_ERR, "ERROR: Failed to create file - %s", aesddata_file);
+        closelog();
+        exit(EXIT_FAILURE);
+    }
+
     // Receive and process data
     size_t buffer_size = 1024;
     char* buffer = (char *)malloc(buffer_size * sizeof(char));
@@ -193,11 +201,13 @@ void *handle_connection(void *arg)
                     cleanup(EXIT_FAILURE);
                 }
             }
+            if (datafd_readonly >= 0) close(datafd_readonly);
         }
         memset(buffer, 0, buffer_size * sizeof(char));
     }
 
     free(buffer);
+    if (datafd >= 0) close(datafd);
 
     // Log closed connection
     syslog(LOG_INFO, "Closed connection from %s", client_data.client_ip);
@@ -287,14 +297,6 @@ int main(int argc, char *argv[]) {
         syslog(LOG_ERR, "ERROR: Failed to listen");
         close(sockfd);
         return -1;
-    }
-
-    // Open file for aesdsocketdata
-    datafd = open(aesddata_file, O_CREAT | O_RDWR | O_APPEND, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-    if (datafd == -1){
-        syslog(LOG_ERR, "ERROR: Failed to create file - %s", aesddata_file);
-        closelog();
-        exit(EXIT_FAILURE);
     }
 
 #if USE_AESD_CHAR_DEVICE != 1

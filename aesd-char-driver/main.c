@@ -24,6 +24,8 @@
 #include <linux/fs.h> // file_operations
 #include <linux/slab.h>
 #include "aesdchar.h"
+#include "aesd_ioctl.h"
+
 int aesd_major =   0; // use dynamic major
 int aesd_minor =   0;
 
@@ -178,6 +180,56 @@ loff_t aesd_llseek(struct file *filp, loff_t off, int whence)
     return fixed_size_llseek(filp, off, whence, total_entries_size);
 }
 
+static long aesd_adjust_file_offset(struct file *filp, unsigned int write_cmd, unsigned int write_cmd_offset)
+{
+    long retval = 0;
+    struct aesd_dev *dev = filp->private_data;
+    long buffer_start_offset = 0;
+    int i;
+
+    if ((write_cmd >= AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED) || 
+        (dev->circular_buffer.entry[write_cmd].size == 0) || 
+        (write_cmd_offset >= dev->circular_buffer.entry[write_cmd].size)) {
+        retval = -EINVAL;
+        goto exit;
+    }
+
+    for (i = 0; i < write_cmd; i++) {
+        buffer_start_offset += dev->circular_buffer.entry[i].size;
+    }
+    filp->f_pos = buffer_start_offset + write_cmd_offset;
+
+exit:
+    return retval;
+}
+
+long aesd_unlocked_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
+{
+    long retval = -ENOTTY;
+    struct aesd_seekto seek_params;
+
+    if ((_IOC_TYPE(cmd) != AESD_IOC_MAGIC) || (_IOC_NR(cmd) > AESDCHAR_IOC_MAXNR)) {
+        goto exit;
+    }
+
+    switch (cmd) {
+    case AESDCHAR_IOCSEEKTO:
+        if (copy_from_user(&seek_params, (struct aesd_seekto __user *)arg, sizeof(struct aesd_seekto))) {
+            retval = -EFAULT;
+        }
+        else {
+            retval = aesd_adjust_file_offset(filp, seek_params.write_cmd, seek_params.write_cmd_offset);
+        }
+        break;
+
+    default:
+        break;
+    }
+
+exit:
+    return retval;
+}
+
 struct file_operations aesd_fops = {
     .owner =    THIS_MODULE,
     .read =     aesd_read,
@@ -185,6 +237,7 @@ struct file_operations aesd_fops = {
     .open =     aesd_open,
     .release =  aesd_release,
     .llseek =   aesd_llseek,
+    .unlocked_ioctl = aesd_unlocked_ioctl,
 };
 
 static int aesd_setup_cdev(struct aesd_dev *dev)

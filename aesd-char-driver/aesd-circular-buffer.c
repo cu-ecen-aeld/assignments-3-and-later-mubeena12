@@ -115,6 +115,17 @@ const char* aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, 
     return replaced_buffer;
 }
 
+size_t aesd_circular_buffer_entries_total_size(struct aesd_circular_buffer *buffer)
+{
+    size_t total_size = 0;
+    uint8_t index;
+    struct aesd_buffer_entry *entry;
+    AESD_CIRCULAR_BUFFER_FOREACH(entry, buffer, index) {
+        total_size += entry->size;
+    }
+    return total_size;
+}
+
 /**
 * Initializes the circular buffer described by @param buffer to an empty struct
 */

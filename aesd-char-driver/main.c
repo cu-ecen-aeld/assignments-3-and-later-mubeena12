@@ -169,12 +169,22 @@ exit:
     return retval;
 }
 
+loff_t aesd_llseek(struct file *filp, loff_t off, int whence)
+{
+    struct aesd_dev *dev = filp->private_data;
+    loff_t total_entries_size =  aesd_circular_buffer_entries_total_size(&dev->circular_buffer);
+
+    // Use fixed_size_llseek to handle the seek operation
+    return fixed_size_llseek(filp, off, whence, total_entries_size);
+}
+
 struct file_operations aesd_fops = {
     .owner =    THIS_MODULE,
     .read =     aesd_read,
     .write =    aesd_write,
     .open =     aesd_open,
     .release =  aesd_release,
+    .llseek =   aesd_llseek,
 };
 
 static int aesd_setup_cdev(struct aesd_dev *dev)

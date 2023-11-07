@@ -14,6 +14,7 @@
 /**
  * References:
  *   1. ChatGPT: Example of char device kernel driver implementation in C
+ *        Follow-up prompt: Add handling of unlocked_ioctl
  */
 
 #include <linux/module.h>

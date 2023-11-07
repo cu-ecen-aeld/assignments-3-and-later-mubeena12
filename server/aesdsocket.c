@@ -169,17 +169,22 @@ void *handle_connection(void *arg)
 #endif
 #if USE_AESD_CHAR_DEVICE == 1
             const char *ioctl_id_string = "AESDCHAR_IOCSEEKTO:";
-            struct aesd_seekto seek_params;
-            sscanf(buffer, "AESDCHAR_IOCSEEKTO:%d,%d", &seek_params.write_cmd, &seek_params.write_cmd_offset);
-
             if (strncmp(buffer, ioctl_id_string, strlen(ioctl_id_string)) == 0) {
-                if (ioctl(datafd, AESDCHAR_IOCSEEKTO, &seek_params) != 0) {
-                    syslog(LOG_ERR, "ERROR: Failed to perform ioctl write command");
-                    cleanup(EXIT_FAILURE);
+                struct aesd_seekto seek_params;
+                if (sscanf(buffer, "AESDCHAR_IOCSEEKTO:%d,%d", &seek_params.write_cmd, &seek_params.write_cmd_offset) != 2) {
+                    syslog(LOG_WARNING, "WARNING: Incorrectly formatted AESDCHAR_IOCSEEKTO. Treating it as regular string to write.");
+                    goto write;
+                }
+                else {
+                    if (ioctl(datafd, AESDCHAR_IOCSEEKTO, &seek_params) != 0) {
+                        syslog(LOG_ERR, "ERROR: Failed to perform ioctl write command");
+                        cleanup(EXIT_FAILURE);
+                    }
                 }
             }
             else {
 #endif
+write:
                 if (write(datafd, buffer, recv_size) == -1) {
                     syslog(LOG_ERR, "ERROR: Failed to write to %s file", aesddata_file);
                     cleanup(EXIT_FAILURE);

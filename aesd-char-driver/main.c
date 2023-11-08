@@ -14,6 +14,7 @@
 /**
  * References:
  *   1. ChatGPT: Example of char device kernel driver implementation in C
+ *        Follow-up prompt: Add handling of unlocked_ioctl
  */
 
 #include <linux/module.h>
@@ -24,6 +25,8 @@
 #include <linux/fs.h> // file_operations
 #include <linux/slab.h>
 #include "aesdchar.h"
+#include "aesd_ioctl.h"
+
 int aesd_major =   0; // use dynamic major
 int aesd_minor =   0;
 
@@ -69,6 +72,10 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
 
     PDEBUG("read %zu bytes with offset %lld",count,*f_pos);
 
+    if (mutex_lock_interruptible(&dev->circular_buffer_mutex)) {
+        retval = -ERESTARTSYS;
+        goto exit;
+    }
     entry = aesd_circular_buffer_find_entry_offset_for_fpos(&dev->circular_buffer, *f_pos, &entry_offset);
     if (entry == NULL) {
         retval = 0; // End of file reached, return 0
@@ -89,6 +96,7 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
     }
 
 exit:
+    mutex_unlock(&dev->circular_buffer_mutex);
     return retval;
 }
 
@@ -110,7 +118,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
      * TODO: handle write
      */
 
-    if (mutex_lock_interruptible(&dev->write_mutex)) {
+    if (mutex_lock_interruptible(&dev->circular_buffer_mutex)) {
         retval = -ERESTARTSYS;
         goto exit;
     }
@@ -165,7 +173,81 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
     }
 
 exit:
-    mutex_unlock(&dev->write_mutex);
+    mutex_unlock(&dev->circular_buffer_mutex);
+    return retval;
+}
+
+loff_t aesd_llseek(struct file *filp, loff_t off, int whence)
+{
+    loff_t retval, total_entries_size;
+    struct aesd_dev *dev = filp->private_data;
+
+    if (mutex_lock_interruptible(&dev->circular_buffer_mutex)) {
+        retval = -ERESTARTSYS;
+        goto exit;
+    }
+    total_entries_size =  aesd_circular_buffer_entries_total_size(&dev->circular_buffer);
+    mutex_unlock(&dev->circular_buffer_mutex);
+
+    // Use fixed_size_llseek to handle the seek operation
+    retval = fixed_size_llseek(filp, off, whence, total_entries_size);
+
+exit:
+    return retval;
+}
+
+static long aesd_adjust_file_offset(struct file *filp, unsigned int write_cmd, unsigned int write_cmd_offset)
+{
+    long retval = 0;
+    struct aesd_dev *dev = filp->private_data;
+    long buffer_start_offset = 0;
+    int i;
+
+    if (mutex_lock_interruptible(&dev->circular_buffer_mutex)) {
+        retval = -ERESTARTSYS;
+        goto exit;
+    }
+    if ((write_cmd >= AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED) || 
+        (dev->circular_buffer.entry[write_cmd].size == 0) || 
+        (write_cmd_offset >= dev->circular_buffer.entry[write_cmd].size)) {
+        retval = -EINVAL;
+        goto exit;
+    }
+
+    for (i = 0; i < write_cmd; i++) {
+        buffer_start_offset += dev->circular_buffer.entry[i].size;
+    }
+    filp->f_pos = buffer_start_offset + write_cmd_offset;
+
+exit:
+    mutex_unlock(&dev->circular_buffer_mutex);
+    return retval;
+}
+
+long aesd_unlocked_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
+{
+    long retval = -ENOTTY;
+    struct aesd_seekto seek_params;
+
+    if ((_IOC_TYPE(cmd) != AESD_IOC_MAGIC) || (_IOC_NR(cmd) > AESDCHAR_IOC_MAXNR)) {
+        goto exit;
+    }
+
+    switch (cmd) {
+    case AESDCHAR_IOCSEEKTO:
+        if (copy_from_user(&seek_params, (struct aesd_seekto __user *)arg, sizeof(struct aesd_seekto))) {
+            retval = -EFAULT;
+        }
+        else {
+            retval = aesd_adjust_file_offset(filp, seek_params.write_cmd, seek_params.write_cmd_offset);
+        }
+        break;
+
+    default:
+        break;
+    }
+
+exit:
     return retval;
 }
 
@@ -175,6 +257,8 @@ struct file_operations aesd_fops = {
     .write =    aesd_write,
     .open =     aesd_open,
     .release =  aesd_release,
+    .llseek =   aesd_llseek,
+    .unlocked_ioctl = aesd_unlocked_ioctl,
 };
 
 static int aesd_setup_cdev(struct aesd_dev *dev)
@@ -211,7 +295,7 @@ int aesd_init_module(void)
     aesd_circular_buffer_init(&aesd_device.circular_buffer);
     aesd_device.cached_entry.buffptr = NULL;
     aesd_device.cached_entry.size = 0;
-    mutex_init(&aesd_device.write_mutex);
+    mutex_init(&aesd_device.circular_buffer_mutex);
     
     result = aesd_setup_cdev(&aesd_device);
 
@@ -240,7 +324,7 @@ void aesd_cleanup_module(void)
         }
     }
 
-    mutex_destroy(&aesd_device.write_mutex);
+    mutex_destroy(&aesd_device.circular_buffer_mutex);
 
     unregister_chrdev_region(devno, 1);
 }

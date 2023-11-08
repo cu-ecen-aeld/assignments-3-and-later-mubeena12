@@ -24,8 +24,9 @@
 #include "queue.h"
 #include <time.h> 
 #include <errno.h>
+#include "aesd_ioctl.h"
 
-int sockfd, datafd, datafd_readonly;
+int sockfd, datafd;
 
 int signal_exit = 0;
 
@@ -78,7 +79,6 @@ void cleanup(int exit_code) {
 
     // Close file descriptors
     if (datafd >= 0) close(datafd);
-    if (datafd_readonly >= 0) close(datafd_readonly);
 
 #if USE_AESD_CHAR_DEVICE != 1
     // Delete the file
@@ -167,10 +167,31 @@ void *handle_connection(void *arg)
             cleanup(EXIT_FAILURE);
         }
 #endif
-        if (write(datafd, buffer, recv_size) == -1) {
-            syslog(LOG_ERR, "ERROR: Failed to write to %s file", aesddata_file);
-            cleanup(EXIT_FAILURE);
-        }
+#if USE_AESD_CHAR_DEVICE == 1
+            const char *ioctl_id_string = "AESDCHAR_IOCSEEKTO:";
+            if (strncmp(buffer, ioctl_id_string, strlen(ioctl_id_string)) == 0) {
+                struct aesd_seekto seek_params;
+                if (sscanf(buffer, "AESDCHAR_IOCSEEKTO:%d,%d", &seek_params.write_cmd, &seek_params.write_cmd_offset) != 2) {
+                    syslog(LOG_WARNING, "WARNING: Incorrectly formatted AESDCHAR_IOCSEEKTO. Treating it as regular string to write.");
+                    goto write;
+                }
+                else {
+                    if (ioctl(datafd, AESDCHAR_IOCSEEKTO, &seek_params) != 0) {
+                        syslog(LOG_ERR, "ERROR: Failed to perform ioctl write command");
+                        cleanup(EXIT_FAILURE);
+                    }
+                }
+            }
+            else {
+#endif
+write:
+                if (write(datafd, buffer, recv_size) == -1) {
+                    syslog(LOG_ERR, "ERROR: Failed to write to %s file", aesddata_file);
+                    cleanup(EXIT_FAILURE);
+                }
+#if USE_AESD_CHAR_DEVICE == 1
+            }
+#endif
 #if USE_AESD_CHAR_DEVICE != 1
         // Unlock the mutex after writing to the file
         if (pthread_mutex_unlock(&aesddata_file_mutex) != 0) {
@@ -181,27 +202,23 @@ void *handle_connection(void *arg)
 
         // Send data back to client if a complete packet is received (ends with newline)
         if (memchr(buffer, '\n', buffer_size) != NULL) {
-            // Open file for aesdsocketdata in read only mode
-            datafd_readonly = open(aesddata_file, O_RDONLY, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-            if (datafd_readonly == -1){
-                syslog(LOG_ERR, "ERROR: Failed to open file in readonly mode - %s", aesddata_file);
-                closelog();
-                exit(EXIT_FAILURE);
-            }
-            size_t bytes_read = read(datafd_readonly, buffer, buffer_size);
-            if (bytes_read == -1) {
-                syslog(LOG_ERR, "ERROR: Failed to read from %s file", aesddata_file);
-                cleanup(EXIT_FAILURE);
-            }
-            while (bytes_read > 0) {
-                send(client_data.client_sockfd, buffer, bytes_read, 0);
-                bytes_read = read(datafd_readonly, buffer, buffer_size); 
+
+#if USE_AESD_CHAR_DEVICE != 1
+                lseek(datafd, 0, SEEK_SET);
+#endif
+                size_t bytes_read = read(datafd, buffer, buffer_size);
                 if (bytes_read == -1) {
                     syslog(LOG_ERR, "ERROR: Failed to read from %s file", aesddata_file);
                     cleanup(EXIT_FAILURE);
                 }
-            }
-            if (datafd_readonly >= 0) close(datafd_readonly);
+                while (bytes_read > 0) {
+                    send(client_data.client_sockfd, buffer, bytes_read, 0);
+                    bytes_read = read(datafd, buffer, buffer_size); 
+                    if (bytes_read == -1) {
+                        syslog(LOG_ERR, "ERROR: Failed to read from %s file", aesddata_file);
+                        cleanup(EXIT_FAILURE);
+                    }
+                }
         }
         memset(buffer, 0, buffer_size * sizeof(char));
     }
